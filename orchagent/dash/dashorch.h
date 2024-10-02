@@ -49,6 +49,9 @@ private:
     EniTable eni_entries_;
     QosTable qos_entries_;
     EniRouteTable eni_route_entries_;
+    std::unique_ptr<swss::Table> dash_eni_result_table_;
+    std::unique_ptr<swss::Table> dash_qos_result_table_;
+    std::shared_ptr<swss::DBConnector> app_state_db_;
     void doTask(ConsumerBase &consumer);
     void doTaskApplianceTable(ConsumerBase &consumer);
     void doTaskRoutingTypeTable(ConsumerBase &consumer);
@@ -71,4 +74,6 @@ private:
     bool removeQosEntry(const std::string& qos_name);
     bool setEniRoute(const std::string& eni, const dash::eni_route::EniRoute& entry);
     bool removeEniRoute(const std::string& eni);
+    swss::FieldValueTuple makeResultAppStateDbEntry(uint32_t res) const;
+    void writeResultToAppStateDB(const std::string& table_name, const std::string& key, uint32_t res) const;
 };

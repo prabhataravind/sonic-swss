@@ -38,6 +38,9 @@ extern CrmOrch *gCrmOrch;
 DashOrch::DashOrch(DBConnector *db, vector<string> &tableName, ZmqServer *zmqServer) : ZmqOrch(db, tableName, zmqServer)
 {
     SWSS_LOG_ENTER();
+    app_state_db_ = shared_ptr<DBConnector>(new DBConnector("DPU_APPL_STATE_DB", 0));
+    dash_eni_result_table_ = unique_ptr<Table>(new Table(app_state_db_.get(), APP_DASH_ENI_TABLE_NAME));
+    dash_qos_result_table_ = unique_ptr<Table>(new Table(app_state_db_.get(), APP_DASH_QOS_TABLE_NAME));
 }
 
 bool DashOrch::getRouteTypeActions(dash::route_type::RoutingType routing_type, dash::route_type::RouteType& route_type)
@@ -576,6 +579,7 @@ void DashOrch::doTaskEniTable(ConsumerBase& consumer)
 {
     SWSS_LOG_ENTER();
 
+    uint32_t result = 0;
     const auto& tn = consumer.getTableName();
 
     auto it = consumer.m_toSync.begin();
@@ -601,6 +605,7 @@ void DashOrch::doTaskEniTable(ConsumerBase& consumer)
             }
             else
             {
+                result = 1;
                 it++;
             }
         }
@@ -612,6 +617,7 @@ void DashOrch::doTaskEniTable(ConsumerBase& consumer)
             }
             else
             {
+                result = 1;
                 it++;
             }
         }
@@ -620,6 +626,7 @@ void DashOrch::doTaskEniTable(ConsumerBase& consumer)
             SWSS_LOG_ERROR("Unknown operation %s", op.c_str());
             it = consumer.m_toSync.erase(it);
         }
+        writeResultToAppStateDB(tn, eni, result);
     }
 }
 
@@ -654,6 +661,8 @@ bool DashOrch::removeQosEntry(const string& qos_name)
 
 void DashOrch::doTaskQosTable(ConsumerBase& consumer)
 {
+    uint32_t result = 0;
+    const auto& tn = consumer.getTableName();
     auto it = consumer.m_toSync.begin();
     while (it != consumer.m_toSync.end())
     {
@@ -678,6 +687,7 @@ void DashOrch::doTaskQosTable(ConsumerBase& consumer)
             }
             else
             {
+                result = 1;
                 it++;
             }
         }
@@ -689,6 +699,7 @@ void DashOrch::doTaskQosTable(ConsumerBase& consumer)
             }
             else
             {
+                result = 1;
                 it++;
             }
         }
@@ -697,6 +708,7 @@ void DashOrch::doTaskQosTable(ConsumerBase& consumer)
             SWSS_LOG_ERROR("Unknown operation %s", op.c_str());
             it = consumer.m_toSync.erase(it);
         }
+        writeResultToAppStateDB(tn, qos_name, result);
     }
 }
 
@@ -880,4 +892,35 @@ void DashOrch::doTask(ConsumerBase& consumer)
     {
         SWSS_LOG_ERROR("Unknown table: %s", tn.c_str());
     }
+}
+
+FieldValueTuple DashOrch::makeResultAppStateDbEntry(uint32_t res) const
+{
+    auto field = "result";
+    auto value = std::to_string(res);
+
+    return FieldValueTuple(field, value);
+}
+
+void DashOrch::writeResultToAppStateDB(const string& table_name, const string& key, uint32_t res) const
+{
+    SWSS_LOG_ENTER();
+
+    std::vector<FieldValueTuple> fvList = {
+        makeResultAppStateDbEntry(res)
+    };
+
+    if (table_name == APP_DASH_ENI_TABLE_NAME)
+    {
+        dash_eni_result_table_->set(key, fvList);
+    }
+    else if (table_name == APP_DASH_QOS_TABLE_NAME)
+    {
+        dash_qos_result_table_->set(key, fvList);
+    }
+    else
+    {
+        SWSS_LOG_NOTICE("Unknown table: %s", table_name.c_str());
+    }
+    SWSS_LOG_NOTICE("Wrote result to AppState DB: %s key", key.c_str());
 }

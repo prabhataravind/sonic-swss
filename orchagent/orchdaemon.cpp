@@ -1123,3 +1123,14 @@ bool FabricOrchDaemon::init()
 
     return true;
 }
+
+DpuOrchDaemon::DpuOrchDaemon(DBConnector *applDb, DBConnector *configDb, DBConnector *stateDb, DBConnector *dpuAppDb, DBConnector *chassisAppDb, ZmqServer *zmqServer) :
+    OrchDaemon(applDb, configDb, stateDb, chassisAppDb, zmqServer),
+    m_applDb(applDb),
+    m_configDb(configDb),
+    m_stateDb(stateDb),
+    m_dpu_appDb(dpuAppDb)
+{
+    SWSS_LOG_ENTER();
+    SWSS_LOG_NOTICE("DpuOrchDaemon starting...");
+}
