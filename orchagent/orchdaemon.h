@@ -116,4 +116,15 @@ private:
     DBConnector *m_configDb;
 };
 
+
+class DpuOrchDaemon : public OrchDaemon
+{
+public:
+    DpuOrchDaemon(DBConnector *, DBConnector *, DBConnector *, DBConnector *, DBConnector *, ZmqServer *);
+private:
+    DBConnector *m_applDb;
+    DBConnector *m_configDb;
+    DBConnector *m_stateDb;
+    DBConnector *m_dpu_appDb;
+};
 #endif /* SWSS_ORCHDAEMON_H */
