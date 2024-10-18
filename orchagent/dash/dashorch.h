@@ -71,6 +71,6 @@ private:
     bool removeQosEntry(const std::string& qos_name);
     bool setEniRoute(const std::string& eni, const dash::eni_route::EniRoute& entry);
     bool removeEniRoute(const std::string& eni);
-    swss::FieldValueTuple makeResultAppStateDbEntry(const string& res) const;
-    void writeResultToAppStateDB(const string& table_name, const string& key, const string& res) const;
+    swss::FieldValueTuple makeResultAppStateDbEntry(uint32_t res) const;
+    void writeResultToAppStateDB(const std::string& table_name, const std::string& key, uint32_t res) const;
 };

@@ -35,8 +35,7 @@ extern sai_object_id_t gSwitchId;
 extern size_t gMaxBulkSize;
 extern CrmOrch *gCrmOrch;
 
-DashOrch::DashOrch(DBConnector *db, vector<string> &tableName, ZmqServer *zmqServer) :
-    ZmqOrch(db, tableName, zmqServer),
+DashOrch::DashOrch(DBConnector *db, vector<string> &tableName, ZmqServer *zmqServer) : ZmqOrch(db, tableName, zmqServer)
 {
     SWSS_LOG_ENTER();
 }
@@ -624,7 +623,7 @@ void DashOrch::doTaskEniTable(ConsumerBase& consumer)
             SWSS_LOG_ERROR("Unknown operation %s", op.c_str());
             it = consumer.m_toSync.erase(it);
         }
-        makeResultAppStateDbEntry(tn, eni, result);
+        writeResultToAppStateDB(tn, eni, result);
     }
 }
 
@@ -706,7 +705,7 @@ void DashOrch::doTaskQosTable(ConsumerBase& consumer)
             SWSS_LOG_ERROR("Unknown operation %s", op.c_str());
             it = consumer.m_toSync.erase(it);
         }
-        makeResultAppStateDbEntry(tn, qos_name, result);
+        writeResultToAppStateDB(tn, qos_name, result);
     }
 }
 
@@ -892,15 +891,15 @@ void DashOrch::doTask(ConsumerBase& consumer)
     }
 }
 
-FieldValueTuple DashOrch::makeResultAppStateDbEntry(const string& res) const
+FieldValueTuple DashOrch::makeResultAppStateDbEntry(uint32_t res) const
 {
     auto field = "result";
-    auto value = res;
+    uin32_t value = res;
 
     return FieldValueTuple(field, value);
 }
 
-void DashOrch::writeResultToAppStateDB(const string& table_name, const string& key, const string& res)
+void DashOrch::writeResultToAppStateDB(const string& table_name, const string& key, uint32_t res)
 {
     SWSS_LOG_ENTER();
 
