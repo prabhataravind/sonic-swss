@@ -121,6 +121,7 @@ class DpuOrchDaemon : public OrchDaemon
 {
 public:
     DpuOrchDaemon(DBConnector *, DBConnector *, DBConnector *, DBConnector *, DBConnector *, ZmqServer *);
+    ~DpuOrchDaemon();
 private:
     DBConnector *m_applDb;
     DBConnector *m_configDb;
