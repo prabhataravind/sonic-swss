@@ -894,12 +894,12 @@ void DashOrch::doTask(ConsumerBase& consumer)
 FieldValueTuple DashOrch::makeResultAppStateDbEntry(uint32_t res) const
 {
     auto field = "result";
-    uin32_t value = res;
+    uint32_t value = res;
 
     return FieldValueTuple(field, value);
 }
 
-void DashOrch::writeResultToAppStateDB(const string& table_name, const string& key, uint32_t res)
+void DashOrch::writeResultToAppStateDB(const string& table_name, const string& key, uint32_t res) const
 {
     SWSS_LOG_ENTER();
 
