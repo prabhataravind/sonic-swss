@@ -894,7 +894,7 @@ void DashOrch::doTask(ConsumerBase& consumer)
 FieldValueTuple DashOrch::makeResultAppStateDbEntry(uint32_t res) const
 {
     auto field = "result";
-    uint32_t value = res;
+    auto value = std::to_string(res);
 
     return FieldValueTuple(field, value);
 }
@@ -907,8 +907,8 @@ void DashOrch::writeResultToAppStateDB(const string& table_name, const string& k
         makeResultAppStateDbEntry(res)
     };
 
-    appStateDb = DBConnector("DPU_APPL_STATE_DB", 0);
-    dashResultTable = Table(appStateDb, table_name);
+    DBConnector appStateDb = DBConnector("DPU_APPL_STATE_DB", 0);
+    Table dashResultTable = Table(appStateDb, table_name);
 
     dashResultTable.set(key, fvList);
 
