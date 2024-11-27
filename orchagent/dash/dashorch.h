@@ -103,6 +103,4 @@ private:
     void addEniToFC(sai_object_id_t oid, const std::string& name);
     void removeEniFromFC(sai_object_id_t oid, const std::string& name);
     void clearEniFCStats();
-    swss::FieldValueTuple makeResultAppStateDbEntry(uint32_t res) const;
-    void writeResultToAppStateDB(const std::string& table_name, const std::string& key, uint32_t res) const;
 };

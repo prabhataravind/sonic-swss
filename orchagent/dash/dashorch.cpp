@@ -1059,34 +1059,3 @@ void DashOrch::doTask(SelectableTimer &timer)
         m_fc_update_timer->stop();
     }
 }
-
-FieldValueTuple DashOrch::makeResultAppStateDbEntry(uint32_t res) const
-{
-    auto field = "result";
-    auto value = std::to_string(res);
-
-    return FieldValueTuple(field, value);
-}
-
-void DashOrch::writeResultToAppStateDB(const string& table_name, const string& key, uint32_t res) const
-{
-    SWSS_LOG_ENTER();
-
-    std::vector<FieldValueTuple> fvList = {
-        makeResultAppStateDbEntry(res)
-    };
-
-    if (table_name == APP_DASH_ENI_TABLE_NAME)
-    {
-        dash_eni_result_table_->set(key, fvList);
-    }
-    else if (table_name == APP_DASH_QOS_TABLE_NAME)
-    {
-        dash_qos_result_table_->set(key, fvList);
-    }
-    else
-    {
-        SWSS_LOG_NOTICE("Unknown table: %s", table_name.c_str());
-    }
-    SWSS_LOG_NOTICE("Wrote result to AppState DB: %s key", key.c_str());
-}
