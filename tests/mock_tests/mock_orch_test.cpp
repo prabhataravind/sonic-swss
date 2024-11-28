@@ -220,7 +220,7 @@ void MockOrchTest::SetUp()
         APP_DASH_QOS_TABLE_NAME
     };
 
-    m_DashOrch = new DashOrch(m_app_db.get(), dash_tables, nullptr);
+    m_DashOrch = new DashOrch(m_app_db.get(), dash_tables, m_dpu_app_state_db, nullptr);
     gDirectory.set(m_DashOrch);
     ut_orch_list.push_back((Orch **)&m_DashOrch);
 
