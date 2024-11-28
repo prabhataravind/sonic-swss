@@ -1149,6 +1149,6 @@ void writeResultToDB(const std::unique_ptr<swss::Table>& table, const string& ke
         makeResultDbEntry(res)
     };
 
-    table_->set(key, fvList);
+    table->set(key, fvList);
     SWSS_LOG_NOTICE("Wrote result to DB for key %s", key.c_str());
 }
