@@ -1131,6 +1131,7 @@ std::vector<sai_stat_id_t> queryAvailableCounterStats(const sai_object_type_t ob
         stat_list.push_back(static_cast<sai_stat_id_t>(statenumlist[i]));
     }
     return stat_list;
+}
 
 FieldValueTuple makeResultDbEntry(uint32_t res)
 {
