@@ -780,7 +780,7 @@ void DashOrch::doTaskQosTable(ConsumerBase& consumer)
             SWSS_LOG_ERROR("Unknown operation %s", op.c_str());
             it = consumer.m_toSync.erase(it);
         }
-        writeResultToDB(dash_eni_qos_table_, qos_name, result);
+        writeResultToDB(dash_qos_result_table_, qos_name, result);
     }
 }
 
