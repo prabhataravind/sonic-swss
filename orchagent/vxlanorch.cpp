@@ -20,6 +20,7 @@ extern "C" {
 #include "sai_serialize.h"
 #include "flex_counter_manager.h"
 #include "converter.h"
+#include "saihelper.h"
 
 /* Global variables */
 extern sai_object_id_t gSwitchId;
@@ -145,7 +146,12 @@ create_tunnel_map(MAP_T map_t)
                           );
     if (status != SAI_STATUS_SUCCESS)
     {
-        throw std::runtime_error("Can't create tunnel map object");
+        task_process_status handle_status = handleSaiCreateStatus(SAI_API_TUNNEL, status);
+        if (handle_status != task_success)
+        {
+            SWSS_LOG_ERROR("Can't create tunnel map object");
+            return SAI_NULL_OBJECT_ID;
+        }
     }
 
     return tunnel_map_id;
@@ -157,7 +163,11 @@ remove_tunnel_map(sai_object_id_t tunnel_map_id)
     sai_status_t status = sai_tunnel_api->remove_tunnel_map(tunnel_map_id);
     if (status != SAI_STATUS_SUCCESS)
     {
-        throw std::runtime_error("Can't remove a tunnel map object");
+        task_process_status handle_status = handleSaiRemoveStatus(SAI_API_TUNNEL, status);
+        if (handle_status != task_success)
+        {
+            SWSS_LOG_ERROR("Can't remove a tunnel map object");
+        }
     }
 }
 
@@ -204,7 +214,12 @@ static sai_object_id_t create_tunnel_map_entry(
 
     if (status != SAI_STATUS_SUCCESS)
     {
-        throw std::runtime_error("Can't create a tunnel map entry object");
+        task_process_status handle_status = handleSaiCreateStatus(SAI_API_TUNNEL, status);
+        if (handle_status != task_success)
+        {
+            SWSS_LOG_ERROR("Can't create a tunnel map entry object");
+            return SAI_NULL_OBJECT_ID;
+        }
     }
 
     return tunnel_map_entry_id;
@@ -221,7 +236,11 @@ void remove_tunnel_map_entry(sai_object_id_t obj_id)
 
     if (status != SAI_STATUS_SUCCESS)
     {
-        throw std::runtime_error("Can't delete a tunnel map entry object");
+        task_process_status handle_status = handleSaiRemoveStatus(SAI_API_TUNNEL, status);
+        if (handle_status != task_success)
+        {
+            SWSS_LOG_ERROR("Can't delete a tunnel map entry object");
+        }
     }
 }
 
@@ -369,7 +388,12 @@ create_tunnel(
                           );
     if (status != SAI_STATUS_SUCCESS)
     {
-        throw std::runtime_error("Can't create a tunnel object");
+        task_process_status handle_status = handleSaiCreateStatus(SAI_API_TUNNEL, status);
+        if (handle_status != task_success)
+        {
+            SWSS_LOG_ERROR("Can't create a tunnel object");
+            return SAI_NULL_OBJECT_ID;
+        }
     }
 
     return tunnel_id;
@@ -383,7 +407,11 @@ remove_tunnel(sai_object_id_t tunnel_id)
         sai_status_t status = sai_tunnel_api->remove_tunnel(tunnel_id);
         if (status != SAI_STATUS_SUCCESS)
         {
-            throw std::runtime_error("Can't remove a tunnel object");
+            task_process_status handle_status = handleSaiRemoveStatus(SAI_API_TUNNEL, status);
+            if (handle_status != task_success)
+            {
+                SWSS_LOG_ERROR("Can't remove a tunnel object");
+            }
         }
     }
     else
@@ -445,7 +473,12 @@ create_tunnel_termination(
                           );
     if (status != SAI_STATUS_SUCCESS)
     {
-        throw std::runtime_error("Can't create a tunnel term table object");
+        task_process_status handle_status = handleSaiCreateStatus(SAI_API_TUNNEL, status);
+        if (handle_status != task_success)
+        {
+            SWSS_LOG_ERROR("Can't create a tunnel term table object");
+            return SAI_NULL_OBJECT_ID;
+        }
     }
 
     return term_table_id;
@@ -459,7 +492,11 @@ remove_tunnel_termination(sai_object_id_t term_table_id)
         sai_status_t status = sai_tunnel_api->remove_tunnel_term_table_entry(term_table_id);
         if (status != SAI_STATUS_SUCCESS)
         {
-            throw std::runtime_error("Can't remove a tunnel term table object");
+            task_process_status handle_status = handleSaiRemoveStatus(SAI_API_TUNNEL, status);
+            if (handle_status != task_success)
+            {
+                SWSS_LOG_ERROR("Can't remove a tunnel term table object");
+            }
         }
     }
     else
@@ -603,10 +640,13 @@ bool VxlanTunnel::removeNextHop(IpAddress& ipAddr, MacAddress macAddress, uint32
     {
         if (sai_next_hop_api->remove_next_hop(nh_tunnels_[key].nh_id) != SAI_STATUS_SUCCESS)
         {
-            SWSS_LOG_INFO("delete NH tunnel for ip '%s', mac '%s' vni %d failed",
+            task_process_status handle_status = handleSaiRemoveStatus(SAI_API_NEXT_HOP, status);
+            if (handle_status != task_success)
+            {
+                SWSS_LOG_ERROR("delete NH tunnel for ip '%s', mac '%s' vni %d failed",
                             ipAddr.to_string().c_str(), macAddress.to_string().c_str(), vni);
-            string err_msg = "NH tunnel delete failed for " + ipAddr.to_string();
-            throw std::runtime_error(err_msg);
+                return false;
+            }
         }
 
         nh_tunnels_.erase(key);
@@ -1352,10 +1392,17 @@ VxlanTunnelOrch::createNextHopTunnel(string tunnelName, IpAddress& ipAddr,
         macptr = &mac;
     }
 
-    if (create_nexthop_tunnel(host_ip, vni, macptr, tunnel_id, &nh_id) != SAI_STATUS_SUCCESS)
+    sai_status_t status = create_nexthop_tunnel(host_ip, vni, macptr, tunnel_id, &nh_id);
+    if (status != SAI_STATUS_SUCCESS)
     {
-        string err_msg = "NH tunnel create failed for " + ipAddr.to_string() + " " + to_string(vni);
-        throw std::runtime_error(err_msg);
+        task_process_status handle_status = handleSaiCreateStatus(SAI_API_NEXT_HOP, status);
+        if (handle_status != task_success)
+        {
+            SWSS_LOG_ERROR("NH vxlan tunnel create failed for %s, ip %s, mac %s, vni %d",
+                        tunnelName.c_str(), ipAddr.to_string().c_str(),
+                        macAddress.to_string().c_str(), vni);
+            return SAI_NULL_OBJECT_ID;
+        }
     }
 
     //Store the nh tunnel id
