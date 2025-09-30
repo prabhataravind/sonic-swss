@@ -638,7 +638,8 @@ bool VxlanTunnel::removeNextHop(IpAddress& ipAddr, MacAddress macAddress, uint32
 
     if (!nh_tunnels_[key].ref_count)
     {
-        if (sai_next_hop_api->remove_next_hop(nh_tunnels_[key].nh_id) != SAI_STATUS_SUCCESS)
+        sai_status_t status = sai_next_hop_api->remove_next_hop(nh_tunnels_[key].nh_id);
+        if (status != SAI_STATUS_SUCCESS)
         {
             task_process_status handle_status = handleSaiRemoveStatus(SAI_API_NEXT_HOP, status);
             if (handle_status != task_success)
@@ -894,6 +895,11 @@ bool VxlanTunnel::createTunnelHw(uint8_t mapper_list, tunnel_map_use_t map_src,
         if (ids_.tunnel_id != SAI_NULL_OBJECT_ID)
         {
             tunnel_orch->addTunnelToFlexCounter(ids_.tunnel_id, tunnel_name_);
+        }
+        else if (tunnel_orch->isTunnelExists(tunnel_name_))
+        {
+            (void)tunnel_orch->delTunnel(tunnel_name_);
+            return false;
         }
 
         if (with_term)
