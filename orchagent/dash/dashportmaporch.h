@@ -4,6 +4,7 @@
 #include "zmqorch.h"
 #include "dash_api/outbound_port_map_range.pb.h"
 #include "bulker.h"
+#include "dashtaskresult.h"
 
 struct DashPortMapBulkContext
 {
@@ -48,15 +49,15 @@ public:
 private:
     void doTask(ConsumerBase &consumer);
     void doTaskPortMapTable(ConsumerBase &consumer);
-    bool addPortMap(const std::string &port_map_id, DashPortMapBulkContext &ctxt);
-    bool addPortMapPost(const std::string &port_map_id, DashPortMapBulkContext &ctxt);
-    bool removePortMap(const std::string &port_map_id, DashPortMapBulkContext &ctxt);
-    bool removePortMapPost(const std::string &port_map_id, DashPortMapBulkContext &ctxt);
+    DashTaskResult addPortMap(const std::string &port_map_id, DashPortMapBulkContext &ctxt);
+    DashTaskResult addPortMapPost(const std::string &port_map_id, DashPortMapBulkContext &ctxt);
+    DashTaskResult removePortMap(const std::string &port_map_id, DashPortMapBulkContext &ctxt);
+    DashTaskResult removePortMapPost(const std::string &port_map_id, DashPortMapBulkContext &ctxt);
     void doTaskPortMapRangeTable(ConsumerBase &consumer);
-    bool addPortMapRange(DashPortMapRangeBulkContext &ctxt);
-    bool addPortMapRangePost(DashPortMapRangeBulkContext &ctxt);
-    bool removePortMapRange(DashPortMapRangeBulkContext &ctxt);
-    bool removePortMapRangePost(DashPortMapRangeBulkContext &ctxt);
+    DashTaskResult addPortMapRange(DashPortMapRangeBulkContext &ctxt);
+    DashTaskResult addPortMapRangePost(DashPortMapRangeBulkContext &ctxt);
+    DashTaskResult removePortMapRange(DashPortMapRangeBulkContext &ctxt);
+    DashTaskResult removePortMapRangePost(DashPortMapRangeBulkContext &ctxt);
 
     bool parsePortMapRange(const std::string &key, DashPortMapRangeBulkContext &ctxt);
 

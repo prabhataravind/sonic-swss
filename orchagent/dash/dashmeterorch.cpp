@@ -169,7 +169,7 @@ bool DashMeterOrch::isMeterPolicyBound(const std::string& meter_policy) const
     return it->second.eni_bind_count > 0;
 }
 
-bool DashMeterOrch::addMeterPolicy(const string& meter_policy, MeterPolicyContext& ctxt)
+DashTaskResult DashMeterOrch::addMeterPolicy(const string& meter_policy, MeterPolicyContext& ctxt)
 {
     SWSS_LOG_ENTER();
 
@@ -177,7 +177,7 @@ bool DashMeterOrch::addMeterPolicy(const string& meter_policy, MeterPolicyContex
     if (meter_policy_oid != SAI_NULL_OBJECT_ID)
     {
         SWSS_LOG_WARN("Meter policy %s already exists", meter_policy.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
 
     sai_ip_addr_family_t sai_addr_family = SAI_IP_ADDR_FAMILY_IPV4;
@@ -196,7 +196,7 @@ bool DashMeterOrch::addMeterPolicy(const string& meter_policy, MeterPolicyContex
         task_process_status handle_status = handleSaiCreateStatus((sai_api_t) SAI_API_DASH_METER, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
@@ -204,31 +204,31 @@ bool DashMeterOrch::addMeterPolicy(const string& meter_policy, MeterPolicyContex
     gCrmOrch->incCrmResUsedCounter(isV4(meter_policy) ? CrmResourceType::CRM_DASH_IPV4_METER_POLICY : CrmResourceType::CRM_DASH_IPV6_METER_POLICY);
     SWSS_LOG_INFO("Meter policy %s added", meter_policy.c_str());
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashMeterOrch::removeMeterPolicy(const string& meter_policy)
+DashTaskResult DashMeterOrch::removeMeterPolicy(const string& meter_policy)
 {
     SWSS_LOG_ENTER();
 
     if (isMeterPolicyBound(meter_policy))
     {
         SWSS_LOG_WARN("Cannot remove bound meter policy %s", meter_policy.c_str());
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     sai_object_id_t meter_policy_oid = getMeterPolicyOid(meter_policy);
     if (meter_policy_oid == SAI_NULL_OBJECT_ID)
     {
         SWSS_LOG_INFO("Failed to find meter policy %s to remove", meter_policy.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
 
     uint32_t rule_count = getMeterPolicyRuleCount(meter_policy);
     if (rule_count != 0)
     {
         SWSS_LOG_INFO("Failed to remove meter policy %s due to rule count %d ", meter_policy.c_str(), rule_count);
-        return true;
+        return DashTaskResult::failed();
     }
 
     sai_status_t status = sai_dash_meter_api->remove_meter_policy(meter_policy_oid);
@@ -238,7 +238,7 @@ bool DashMeterOrch::removeMeterPolicy(const string& meter_policy)
         task_process_status handle_status = handleSaiRemoveStatus((sai_api_t) SAI_API_DASH_METER, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
@@ -246,7 +246,7 @@ bool DashMeterOrch::removeMeterPolicy(const string& meter_policy)
     gCrmOrch->decCrmResUsedCounter(isV4(meter_policy) ? CrmResourceType::CRM_DASH_IPV4_METER_POLICY : CrmResourceType::CRM_DASH_IPV6_METER_POLICY);
     SWSS_LOG_INFO("Meter policy %s removed", meter_policy.c_str());
 
-    return true;
+    return DashTaskResult::ok();
 }
 
 void DashMeterOrch::doTaskMeterPolicyTable(ConsumerBase& consumer)
@@ -272,7 +272,8 @@ void DashMeterOrch::doTaskMeterPolicyTable(ConsumerBase& consumer)
                 it = consumer.m_toSync.erase(it);
                 continue;
             }
-            if (addMeterPolicy(key, ctxt))
+            auto task_result = addMeterPolicy(key, ctxt);
+            if (!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
             }
@@ -283,7 +284,8 @@ void DashMeterOrch::doTaskMeterPolicyTable(ConsumerBase& consumer)
         }
         else if (op == DEL_COMMAND)
         {
-            if (removeMeterPolicy(key))
+            auto task_result = removeMeterPolicy(key);
+            if (!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
             }
@@ -301,7 +303,7 @@ void DashMeterOrch::doTaskMeterPolicyTable(ConsumerBase& consumer)
 }
 
 
-bool DashMeterOrch::addMeterRule(const string& key, MeterRuleBulkContext& ctxt)
+DashTaskResult DashMeterOrch::addMeterRule(const string& key, MeterRuleBulkContext& ctxt)
 {
     SWSS_LOG_ENTER();
 
@@ -309,20 +311,20 @@ bool DashMeterOrch::addMeterRule(const string& key, MeterRuleBulkContext& ctxt)
     if (exists)
     {
         SWSS_LOG_WARN("Meter rule entry already exists for %s", key.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
 
     if (isMeterPolicyBound(ctxt.meter_policy))
     {
         SWSS_LOG_WARN("Cannot add new rule %s to Meter policy %s as it is already bound", key.c_str(), ctxt.meter_policy.c_str());
-        return true;
+        return DashTaskResult::failed();
     }
 
     sai_object_id_t meter_policy_oid = getMeterPolicyOid(ctxt.meter_policy);
     if (meter_policy_oid == SAI_NULL_OBJECT_ID)
     {
         SWSS_LOG_INFO("Retry for rule %s as meter policy %s not found", key.c_str(), ctxt.meter_policy.c_str());
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     auto& object_ids = ctxt.object_ids;
@@ -352,17 +354,17 @@ bool DashMeterOrch::addMeterRule(const string& key, MeterRuleBulkContext& ctxt)
     object_ids.emplace_back();
     meter_rule_bulker_.create_entry(&object_ids.back(), (uint32_t)meter_rule_attrs.size(), meter_rule_attrs.data());
 
-    return false;
+    return DashTaskResult::retryLater();
 }
 
-bool DashMeterOrch::addMeterRulePost(const string& key, const MeterRuleBulkContext& ctxt)
+DashTaskResult DashMeterOrch::addMeterRulePost(const string& key, const MeterRuleBulkContext& ctxt)
 {
     SWSS_LOG_ENTER();
 
     const auto& object_ids = ctxt.object_ids;
     if (object_ids.empty())
     {
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     auto it_id = object_ids.begin();
@@ -370,7 +372,7 @@ bool DashMeterOrch::addMeterRulePost(const string& key, const MeterRuleBulkConte
     if (id == SAI_NULL_OBJECT_ID)
     {
         SWSS_LOG_ERROR("Failed to create meter rule entry for %s", key.c_str());
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     meter_rule_entries_[key] = { id, ctxt.metadata, ctxt.meter_policy, ctxt.rule_num };
@@ -379,10 +381,10 @@ bool DashMeterOrch::addMeterRulePost(const string& key, const MeterRuleBulkConte
     gCrmOrch->incCrmResUsedCounter(isV4(ctxt.meter_policy) ? CrmResourceType::CRM_DASH_IPV4_METER_RULE : CrmResourceType::CRM_DASH_IPV6_METER_RULE);
     SWSS_LOG_INFO("Meter Rule entry for %s added", key.c_str());
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashMeterOrch::removeMeterRule(const string& key, MeterRuleBulkContext& ctxt)
+DashTaskResult DashMeterOrch::removeMeterRule(const string& key, MeterRuleBulkContext& ctxt)
 {
     SWSS_LOG_ENTER();
 
@@ -390,12 +392,12 @@ bool DashMeterOrch::removeMeterRule(const string& key, MeterRuleBulkContext& ctx
     if (!exists)
     {
         SWSS_LOG_WARN("Failed to find meter rule entry %s to remove", key.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
     if (isMeterPolicyBound(ctxt.meter_policy))
     {
         SWSS_LOG_WARN("Cannot remove rule from meter policy %s as it is already bound", ctxt.meter_policy.c_str());
-        return true;
+        return DashTaskResult::failed();
     }
 
     auto& object_statuses = ctxt.object_statuses;
@@ -403,17 +405,17 @@ bool DashMeterOrch::removeMeterRule(const string& key, MeterRuleBulkContext& ctx
     meter_rule_bulker_.remove_entry(&object_statuses.back(),
                                     meter_rule_entries_[key].meter_rule_oid);
 
-    return false;
+    return DashTaskResult::retryLater();
 }
 
-bool DashMeterOrch::removeMeterRulePost(const string& key, const MeterRuleBulkContext& ctxt)
+DashTaskResult DashMeterOrch::removeMeterRulePost(const string& key, const MeterRuleBulkContext& ctxt)
 {
     SWSS_LOG_ENTER();
 
     const auto& object_statuses = ctxt.object_statuses;
     if (object_statuses.empty())
     {
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     auto it_status = object_statuses.begin();
@@ -423,13 +425,13 @@ bool DashMeterOrch::removeMeterRulePost(const string& key, const MeterRuleBulkCo
         // Retry later if object has non-zero reference to it
         if (status == SAI_STATUS_NOT_EXECUTED)
         {
-            return false;
+            return DashTaskResult::retryLater();
         }
         SWSS_LOG_ERROR("Failed to remove meter rule entry for %s", key.c_str());
         task_process_status handle_status = handleSaiRemoveStatus((sai_api_t) SAI_API_DASH_METER, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
@@ -438,7 +440,7 @@ bool DashMeterOrch::removeMeterRulePost(const string& key, const MeterRuleBulkCo
     decrMeterPolicyRuleCount(ctxt.meter_policy);
     SWSS_LOG_INFO("Meter rule entry removed for %s", key.c_str());
 
-    return true;
+    return DashTaskResult::ok();
 }
 
 
@@ -487,7 +489,8 @@ void DashMeterOrch::doTaskMeterRuleTable(ConsumerBase& consumer)
                     it = consumer.m_toSync.erase(it);
                     continue;
                 }
-                if (addMeterRule(key, ctxt))
+                auto task_result = addMeterRule(key, ctxt);
+                if (!task_result.retry)
                 {
                     it = consumer.m_toSync.erase(it);
                 }
@@ -498,7 +501,8 @@ void DashMeterOrch::doTaskMeterRuleTable(ConsumerBase& consumer)
             }
             else if (op == DEL_COMMAND)
             {
-                if (removeMeterRule(key, ctxt))
+                auto task_result = removeMeterRule(key, ctxt);
+                if (!task_result.retry)
                 {
                     it = consumer.m_toSync.erase(it);
                 }
@@ -541,7 +545,8 @@ void DashMeterOrch::doTaskMeterRuleTable(ConsumerBase& consumer)
                     continue;
                 }
 
-                if (addMeterRulePost(key, ctxt))
+                auto task_result = addMeterRulePost(key, ctxt);
+                if (!task_result.retry)
                 {
                     it_prev = consumer.m_toSync.erase(it_prev);
                 }
@@ -558,7 +563,8 @@ void DashMeterOrch::doTaskMeterRuleTable(ConsumerBase& consumer)
                     continue;
                 }
 
-                if (removeMeterRulePost(key, ctxt))
+                auto task_result = removeMeterRulePost(key, ctxt);
+                if (!task_result.retry)
                 {
                     it_prev = consumer.m_toSync.erase(it_prev);
                 }

@@ -18,6 +18,7 @@
 #include "zmqorch.h"
 #include "zmqserver.h"
 #include "flex_counter_manager.h"
+#include "dashtaskresult.h"
 
 #include "dash_api/appliance.pb.h"
 #include "dash_api/route_type.pb.h"
@@ -83,25 +84,25 @@ private:
     void doTaskQosTable(ConsumerBase &consumer);
     void doTaskEniRouteTable(ConsumerBase &consumer);
     void doTaskRouteGroupTable(ConsumerBase &consumer);
-    bool addApplianceEntry(const std::string& appliance_id, const dash::appliance::Appliance &entry);
-    bool addApplianceTrustedVni(const std::string& appliance_id, const dash::appliance::Appliance& entry);
-    bool removeApplianceEntry(const std::string& appliance_id);
-    bool removeApplianceTrustedVni(const std::string& appliance_id, const dash::appliance::Appliance& entry);
-    bool addRoutingTypeEntry(const dash::route_type::RoutingType &routing_type, const dash::route_type::RouteType &entry);
-    bool removeRoutingTypeEntry(const dash::route_type::RoutingType &routing_type);
-    bool addEniObject(const std::string& eni, EniEntry& entry);
-    bool addEniAddrMapEntry(const std::string& eni, const EniEntry& entry);
-    bool addEniTrustedVnis(const std::string& eni, const EniEntry& entry);
-    bool addEni(const std::string& eni, EniEntry &entry);
-    bool removeEniObject(const std::string& eni);
-    bool removeEniAddrMapEntry(const std::string& eni);
-    bool removeEniTrustedVnis(const std::string& eni, const EniEntry& entry);
-    bool removeEni(const std::string& eni);
-    bool setEniAdminState(const std::string& eni, const EniEntry& entry);
-    bool addQosEntry(const std::string& qos_name, const dash::qos::Qos &entry);
-    bool removeQosEntry(const std::string& qos_name);
-    bool setEniRoute(const std::string& eni, const dash::eni_route::EniRoute& entry);
-    bool removeEniRoute(const std::string& eni);
+    DashTaskResult addApplianceEntry(const std::string& appliance_id, const dash::appliance::Appliance &entry);
+    DashTaskResult addApplianceTrustedVni(const std::string& appliance_id, const dash::appliance::Appliance& entry);
+    DashTaskResult removeApplianceEntry(const std::string& appliance_id);
+    DashTaskResult removeApplianceTrustedVni(const std::string& appliance_id, const dash::appliance::Appliance& entry);
+    DashTaskResult addRoutingTypeEntry(const dash::route_type::RoutingType &routing_type, const dash::route_type::RouteType &entry);
+    DashTaskResult removeRoutingTypeEntry(const dash::route_type::RoutingType &routing_type);
+    DashTaskResult addEniObject(const std::string& eni, EniEntry& entry);
+    DashTaskResult addEniAddrMapEntry(const std::string& eni, const EniEntry& entry);
+    DashTaskResult addEniTrustedVnis(const std::string& eni, const EniEntry& entry);
+    DashTaskResult addEni(const std::string& eni, EniEntry &entry);
+    DashTaskResult removeEniObject(const std::string& eni);
+    DashTaskResult removeEniAddrMapEntry(const std::string& eni);
+    DashTaskResult removeEniTrustedVnis(const std::string& eni, const EniEntry& entry);
+    DashTaskResult removeEni(const std::string& eni);
+    DashTaskResult setEniAdminState(const std::string& eni, const EniEntry& entry);
+    DashTaskResult addQosEntry(const std::string& qos_name, const dash::qos::Qos &entry);
+    DashTaskResult removeQosEntry(const std::string& qos_name);
+    DashTaskResult setEniRoute(const std::string& eni, const dash::eni_route::EniRoute& entry);
+    DashTaskResult removeEniRoute(const std::string& eni);
 
 private:
 

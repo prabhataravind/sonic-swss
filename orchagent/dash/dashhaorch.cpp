@@ -208,7 +208,7 @@ HaScopeEntry DashHaOrch::getHaScopeForEni(const std::string& eni)
     return m_ha_scope_entries.begin()->second;
 }
 
-bool DashHaOrch::updateExistingHaSetEntry(const std::string &key, const dash::ha_set::HaSet &entry, sai_object_id_t sai_ha_set_oid)
+DashTaskResult DashHaOrch::updateExistingHaSetEntry(const std::string &key, const dash::ha_set::HaSet &entry, sai_object_id_t sai_ha_set_oid)
 {
     SWSS_LOG_ENTER();
 
@@ -219,7 +219,7 @@ bool DashHaOrch::updateExistingHaSetEntry(const std::string &key, const dash::ha
     if (!to_sai(entry.peer_ip(), sai_peer_ip))
     {
         SWSS_LOG_WARN("HA Set entry already exists for %s", key.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
 
     ha_set_attr_list[0].id = SAI_HA_SET_ATTR_PEER_IP;
@@ -232,7 +232,7 @@ bool DashHaOrch::updateExistingHaSetEntry(const std::string &key, const dash::ha
         task_process_status handle_status = handleSaiCreateStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
@@ -242,10 +242,10 @@ bool DashHaOrch::updateExistingHaSetEntry(const std::string &key, const dash::ha
 
     *m_ha_set_entries[key].metadata.mutable_peer_ip() = entry.peer_ip();
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashHaOrch::addHaSetEntry(const std::string &key, const dash::ha_set::HaSet &entry)
+DashTaskResult DashHaOrch::addHaSetEntry(const std::string &key, const dash::ha_set::HaSet &entry)
 {
     SWSS_LOG_ENTER();
 
@@ -268,12 +268,12 @@ bool DashHaOrch::addHaSetEntry(const std::string &key, const dash::ha_set::HaSet
 
     if (!to_sai(entry.local_ip(), sai_local_ip))
     {
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     if (!to_sai(entry.peer_ip(), sai_peer_ip))
     {
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     ha_set_attr_list[0].id = SAI_HA_SET_ATTR_LOCAL_IP;
@@ -311,16 +311,16 @@ bool DashHaOrch::addHaSetEntry(const std::string &key, const dash::ha_set::HaSet
         task_process_status handle_status = handleSaiCreateStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
     m_ha_set_entries[key] = HaSetEntry {sai_ha_set_oid, entry};
     SWSS_LOG_NOTICE("Created HA Set object for %s", key.c_str());
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashHaOrch::removeHaSetEntry(const std::string &key)
+DashTaskResult DashHaOrch::removeHaSetEntry(const std::string &key)
 {
     SWSS_LOG_ENTER();
 
@@ -329,7 +329,7 @@ bool DashHaOrch::removeHaSetEntry(const std::string &key)
     if (it == m_ha_set_entries.end())
     {
         SWSS_LOG_WARN("HA Set entry does not exist for %s", key.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
 
     sai_status_t status = sai_dash_ha_api->remove_ha_set(it->second.ha_set_id);
@@ -340,20 +340,18 @@ bool DashHaOrch::removeHaSetEntry(const std::string &key)
         task_process_status handle_status = handleSaiRemoveStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
     m_ha_set_entries.erase(it);
     SWSS_LOG_NOTICE("Removed HA Set object for %s", key.c_str());
 
-    return true;
+    return DashTaskResult::ok();
 }
 
 void DashHaOrch::doTaskHaSetTable(ConsumerBase &consumer)
 {
     SWSS_LOG_ENTER();
-
-    uint32_t result;
 
     auto it = consumer.m_toSync.begin();
 
@@ -362,7 +360,6 @@ void DashHaOrch::doTaskHaSetTable(ConsumerBase &consumer)
         KeyOpFieldsValuesTuple tuple = it->second;
         const auto& key = kfvKey(tuple);
         const auto& op = kfvOp(tuple);
-        result = DASH_RESULT_SUCCESS;
 
         if (op == SET_COMMAND)
         {
@@ -388,21 +385,22 @@ void DashHaOrch::doTaskHaSetTable(ConsumerBase &consumer)
                 continue;
             }
 
-            if (addHaSetEntry(key, entry))
+            auto task_result = addHaSetEntry(key, entry);
+            if (!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
             }
             else
             {
-                result = DASH_RESULT_FAILURE;
                 it++;
             }
-            writeResultToDB(dash_ha_set_result_table_, key, result);
+            writeResultToDB(dash_ha_set_result_table_, key, task_result.success ? DASH_RESULT_SUCCESS : DASH_RESULT_FAILURE);
 
         }
         else if (op == DEL_COMMAND)
         {
-            if(removeHaSetEntry(key))
+            auto task_result = removeHaSetEntry(key);
+            if(!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
                 removeResultFromDB(dash_ha_set_result_table_, key);
@@ -420,7 +418,7 @@ void DashHaOrch::doTaskHaSetTable(ConsumerBase &consumer)
     }
 }
 
-bool DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::HaScope &entry)
+DashTaskResult DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::HaScope &entry)
 {
     SWSS_LOG_ENTER();
 
@@ -432,25 +430,29 @@ bool DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::H
 
         if (ha_scope_it->second.metadata.ha_role() != entry.ha_role())
         {
-            success = success && setHaScopeHaRole(key, entry);
+            auto role_result = setHaScopeHaRole(key, entry);
+            success = success && role_result.success;
             repeated_message = false;
         }
 
         if (entry.flow_reconcile_requested() == true)
         {
-            success = success && setHaScopeFlowReconcileRequest(key);
+            auto reconcile_result = setHaScopeFlowReconcileRequest(key);
+            success = success && reconcile_result.success;
             repeated_message = false;
         }
 
         if (entry.activate_role_requested() == true)
         {
-            success = success && setHaScopeActivateRoleRequest(key);
+            auto activate_result = setHaScopeActivateRoleRequest(key);
+            success = success && activate_result.success;
             repeated_message = false;
         }
 
         if (ha_scope_it->second.metadata.disabled() != entry.disabled())
         {
-            success = success && setHaScopeDisabled(key, entry.disabled());
+            auto disabled_result = setHaScopeDisabled(key, entry.disabled());
+            success = success && disabled_result.success;
             repeated_message = false;
         }
 
@@ -463,7 +465,7 @@ bool DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::H
             SWSS_LOG_NOTICE("HA Scope entry updated for %s", key.c_str());
         }
 
-        return success;
+        return success ? DashTaskResult::ok() : DashTaskResult::retryLater();
     }
 
     std::map<std::string, HaSetEntry>::iterator ha_set_it;
@@ -481,7 +483,7 @@ bool DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::H
     {
         // If there is no HA Set entry, we cannot create HA Scope.
         SWSS_LOG_ERROR("HA Set entry does not exist for %s", key.c_str());
-        return false;
+        return DashTaskResult::retryLater();
     }
     sai_object_id_t ha_set_oid = ha_set_it->second.ha_set_id;
 
@@ -579,7 +581,7 @@ bool DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::H
         task_process_status handle_status = handleSaiCreateStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
     m_ha_scope_entries[key] = HaScopeEntry {sai_ha_scope_oid, entry, getNowTime(), SAI_DASH_HA_STATE_DEAD, getNowTime()};
@@ -592,7 +594,7 @@ bool DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::H
         if (eni_entry == nullptr)
         {
             SWSS_LOG_ERROR("ENI entry does not exist for %s", key.c_str());
-            return false;
+            return DashTaskResult::retryLater();
         }
 
         return setEniHaScopeId(eni_entry->eni_id, sai_ha_scope_oid);
@@ -604,7 +606,7 @@ bool DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::H
         bool success = true;
         while (it != eni_table->end())
         {
-            if (!setEniHaScopeId(it->second.eni_id, sai_ha_scope_oid))
+            if (!setEniHaScopeId(it->second.eni_id, sai_ha_scope_oid).success)
             {
                 SWSS_LOG_ERROR("Failed to set HA Scope ID for ENI %s", it->first.c_str());
                 success = false;
@@ -614,19 +616,19 @@ bool DashHaOrch::addHaScopeEntry(const std::string &key, const dash::ha_scope::H
 
         if (!success)
         {
-            return false;
+            return DashTaskResult::retryLater();
         }
     }
     else
     {
         SWSS_LOG_ERROR("Invalid HA Scope type %s: %s", ha_set_it->first.c_str(), dash::types::HaScope_Name(ha_set_it->second.metadata.scope()).c_str());
-        return false;
+        return DashTaskResult::retryLater();
     }
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashHaOrch::setHaScopeHaRole(const std::string &key, const dash::ha_scope::HaScope &entry)
+DashTaskResult DashHaOrch::setHaScopeHaRole(const std::string &key, const dash::ha_scope::HaScope &entry)
 {
     SWSS_LOG_ENTER();
 
@@ -656,16 +658,16 @@ bool DashHaOrch::setHaScopeHaRole(const std::string &key, const dash::ha_scope::
         task_process_status handle_status = handleSaiSetStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
     SWSS_LOG_NOTICE("Set HA Scope role for %s to %s", key.c_str(), (dash::types::HaRole_Name(entry.ha_role())).c_str());
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashHaOrch::setHaScopeFlowReconcileRequest(const std::string &key)
+DashTaskResult DashHaOrch::setHaScopeFlowReconcileRequest(const std::string &key)
 {
     SWSS_LOG_ENTER();
 
@@ -684,7 +686,7 @@ bool DashHaOrch::setHaScopeFlowReconcileRequest(const std::string &key)
         task_process_status handle_status = handleSaiSetStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
     SWSS_LOG_NOTICE("Set HA Scope flow reconcile request for %s", key.c_str());
@@ -692,10 +694,10 @@ bool DashHaOrch::setHaScopeFlowReconcileRequest(const std::string &key)
     std::vector<FieldValueTuple> fvs = {{"flow_reconcile_pending", "false"}};
     m_dpuStateDbHaScopeTable->set(key, fvs);
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashHaOrch::setHaScopeActivateRoleRequest(const std::string &key)
+DashTaskResult DashHaOrch::setHaScopeActivateRoleRequest(const std::string &key)
 {
     SWSS_LOG_ENTER();
 
@@ -714,7 +716,7 @@ bool DashHaOrch::setHaScopeActivateRoleRequest(const std::string &key)
         task_process_status handle_status = handleSaiSetStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
     SWSS_LOG_NOTICE("Set HA Scope activate role request for %s", key.c_str());
@@ -722,10 +724,10 @@ bool DashHaOrch::setHaScopeActivateRoleRequest(const std::string &key)
     std::vector<FieldValueTuple> fvs = {{"activate_role_pending", "false"}};
     m_dpuStateDbHaScopeTable->set(key, fvs);
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashHaOrch::setHaScopeDisabled(const std::string &key, bool disabled)
+DashTaskResult DashHaOrch::setHaScopeDisabled(const std::string &key, bool disabled)
 {
     SWSS_LOG_ENTER();
 
@@ -744,17 +746,17 @@ bool DashHaOrch::setHaScopeDisabled(const std::string &key, bool disabled)
         task_process_status handle_status = handleSaiSetStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
     m_ha_scope_entries[key].metadata.set_disabled(disabled);
     SWSS_LOG_NOTICE("Set HA Scope admin state for %s to %d", key.c_str(), !disabled);
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashHaOrch::setEniHaScopeId(const sai_object_id_t eni_id, const sai_object_id_t ha_scope_id)
+DashTaskResult DashHaOrch::setEniHaScopeId(const sai_object_id_t eni_id, const sai_object_id_t ha_scope_id)
 {
     SWSS_LOG_ENTER();
 
@@ -769,14 +771,14 @@ bool DashHaOrch::setEniHaScopeId(const sai_object_id_t eni_id, const sai_object_
         task_process_status handle_status = handleSaiSetStatus((sai_api_t) SAI_API_DASH_ENI, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashHaOrch::removeHaScopeEntry(const std::string &key)
+DashTaskResult DashHaOrch::removeHaScopeEntry(const std::string &key)
 {
     SWSS_LOG_ENTER();
 
@@ -785,10 +787,8 @@ bool DashHaOrch::removeHaScopeEntry(const std::string &key)
     if (it == m_ha_scope_entries.end())
     {
         SWSS_LOG_WARN("HA Scope entry does not exist for %s", key.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
-
-    sai_status_t status = sai_dash_ha_api->remove_ha_scope(it->second.ha_scope_id);
 
     if (status != SAI_STATUS_SUCCESS)
     {
@@ -796,20 +796,18 @@ bool DashHaOrch::removeHaScopeEntry(const std::string &key)
         task_process_status handle_status = handleSaiRemoveStatus((sai_api_t) SAI_API_DASH_HA, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
     m_ha_scope_entries.erase(it);
     SWSS_LOG_NOTICE("Removed HA Scope object for %s", key.c_str());
 
-    return true;
+    return DashTaskResult::ok();
 }
 
 void DashHaOrch::doTaskHaScopeTable(ConsumerBase &consumer)
 {
     SWSS_LOG_ENTER();
-
-    uint32_t result;
 
     auto it = consumer.m_toSync.begin();
 
@@ -818,7 +816,6 @@ void DashHaOrch::doTaskHaScopeTable(ConsumerBase &consumer)
         KeyOpFieldsValuesTuple tuple = it->second;
         const auto& key = kfvKey(tuple);
         const auto& op = kfvOp(tuple);
-        result = DASH_RESULT_SUCCESS;
 
         if (op == SET_COMMAND)
         {
@@ -851,20 +848,21 @@ void DashHaOrch::doTaskHaScopeTable(ConsumerBase &consumer)
                 continue;
             }
 
-            if (addHaScopeEntry(key, entry))
+            auto task_result = addHaScopeEntry(key, entry);
+            if (!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
             }
             else
             {
-                result = DASH_RESULT_FAILURE;
                 it++;
             }
-            writeResultToDB(dash_ha_scope_result_table_, key, result);
+            writeResultToDB(dash_ha_scope_result_table_, key, task_result.success ? DASH_RESULT_SUCCESS : DASH_RESULT_FAILURE);
         }
         else if (op == DEL_COMMAND)
         {
-            if(removeHaScopeEntry(key))
+            auto task_result = removeHaScopeEntry(key);
+            if(!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
                 removeResultFromDB(dash_ha_scope_result_table_, key);

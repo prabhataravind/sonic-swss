@@ -15,6 +15,7 @@
 #include "dashorch.h"
 #include "zmqorch.h"
 #include "zmqserver.h"
+#include "dashtaskresult.h"
 
 #include "dash_api/route.pb.h"
 #include "dash_api/route_rule.pb.h"
@@ -77,14 +78,14 @@ private:
     void doTaskRouteTable(ConsumerBase &consumer);
     void doTaskRouteRuleTable(ConsumerBase &consumer);
     void doTaskRouteGroupTable(ConsumerBase &consumer);
-    bool addOutboundRouting(const std::string& key, OutboundRoutingBulkContext& ctxt);
-    bool addOutboundRoutingPost(const std::string& key, const OutboundRoutingBulkContext& ctxt);
-    bool removeOutboundRouting(const std::string& route_group, const swss::IpPrefix& destination, OutboundRoutingBulkContext& ctxt);
-    bool removeOutboundRoutingPost(const std::string& key, const OutboundRoutingBulkContext& ctxt);
-    bool addInboundRouting(const std::string& key, InboundRoutingBulkContext& ctxt);
-    bool addInboundRoutingPost(const std::string& key, const InboundRoutingBulkContext& ctxt);
-    bool removeInboundRouting(const std::string& key, InboundRoutingBulkContext& ctxt);
-    bool removeInboundRoutingPost(const std::string& key, const InboundRoutingBulkContext& ctxt);
-    bool addRouteGroup(const std::string& key, const dash::route_group::RouteGroup& entry);
-    bool removeRouteGroup(const std::string& key);
+    DashTaskResult addOutboundRouting(const std::string& key, OutboundRoutingBulkContext& ctxt);
+    DashTaskResult addOutboundRoutingPost(const std::string& key, const OutboundRoutingBulkContext& ctxt);
+    DashTaskResult removeOutboundRouting(const std::string& route_group, const swss::IpPrefix& destination, OutboundRoutingBulkContext& ctxt);
+    DashTaskResult removeOutboundRoutingPost(const std::string& key, const OutboundRoutingBulkContext& ctxt);
+    DashTaskResult addInboundRouting(const std::string& key, InboundRoutingBulkContext& ctxt);
+    DashTaskResult addInboundRoutingPost(const std::string& key, const InboundRoutingBulkContext& ctxt);
+    DashTaskResult removeInboundRouting(const std::string& key, InboundRoutingBulkContext& ctxt);
+    DashTaskResult removeInboundRoutingPost(const std::string& key, const InboundRoutingBulkContext& ctxt);
+    DashTaskResult addRouteGroup(const std::string& key, const dash::route_group::RouteGroup& entry);
+    DashTaskResult removeRouteGroup(const std::string& key);
 };
