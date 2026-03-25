@@ -6,6 +6,7 @@
 #include "dbconnector.h"
 #include "zmqorch.h"
 #include "zmqserver.h"
+#include "dashtaskresult.h"
 
 struct DashTunnelEndpointEntry
 {
@@ -63,16 +64,16 @@ private:
     std::unique_ptr<swss::Table> dash_tunnel_result_table_;
 
     void doTask(ConsumerBase &consumer);
-    bool addTunnel(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
-    bool addTunnelPost(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
+    DashTaskResult addTunnel(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
+    DashTaskResult addTunnelPost(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
     void addTunnelNextHops(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
-    bool addTunnelNextHopsPost(const std::string& tunnel_name, DashTunnelBulkContext& ctxt, const bool tunnel_succeess);
+    DashTaskResult addTunnelNextHopsPost(const std::string& tunnel_name, DashTunnelBulkContext& ctxt, const bool tunnel_succeess);
     void addTunnelMember(const sai_object_id_t tunnel_oid, const sai_object_id_t nhop_oid, DashTunnelBulkContext& ctxt);
-    bool addTunnelMemberPost(const std::string& tunnel_name, const DashTunnelBulkContext& ctxt);
-    bool removeTunnel(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
-    bool removeTunnelPost(const std::string& tunnel_name, const DashTunnelBulkContext& ctxt);
-    bool removeTunnelNextHop(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
-    bool removeTunnelNextHopPost(const std::string& tunnel_name, const DashTunnelBulkContext& ctxt);
+    DashTaskResult addTunnelMemberPost(const std::string& tunnel_name, const DashTunnelBulkContext& ctxt);
+    DashTaskResult removeTunnel(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
+    DashTaskResult removeTunnelPost(const std::string& tunnel_name, const DashTunnelBulkContext& ctxt);
+    DashTaskResult removeTunnelNextHop(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
+    DashTaskResult removeTunnelNextHopPost(const std::string& tunnel_name, const DashTunnelBulkContext& ctxt);
     void removeTunnelEndpoints(const std::string& tunnel_name, DashTunnelBulkContext& ctxt);
-    bool removeTunnelEndpointsPost(const std::string& tunnel_name, const DashTunnelBulkContext& ctxt);
+    DashTaskResult removeTunnelEndpointsPost(const std::string& tunnel_name, const DashTunnelBulkContext& ctxt);
 };

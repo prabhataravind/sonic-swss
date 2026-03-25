@@ -17,6 +17,8 @@
 #include "dash_api/vnet.pb.h"
 #include "dash_api/vnet_mapping.pb.h"
 
+#include "dashtaskresult.h"
+
 struct VnetEntry
 {
     sai_object_id_t vni;
@@ -82,23 +84,24 @@ private:
     void doTaskVnetTable(ConsumerBase &consumer);
     void doTaskVnetMapTable(ConsumerBase &consumer);
 
-    // The following add/remove methods will return true if the provided key should be removed from the
-    // consumer (i.e. task is done and no retries are required) and false otherwise.
+    // The following add/remove methods will return DashTaskResult indicating the operation result.
+    // DashTaskResult::ok() means the operation succeeded and the key should be removed from the consumer.
+    // DashTaskResult::retryLater() means the key should be kept in the consumer for retry.
     // Methods which only have one possible outcome will have return type void.
-    bool addVnet(const std::string& key, DashVnetBulkContext& ctxt);
-    bool addVnetPost(const std::string& key, const DashVnetBulkContext& ctxt);
-    bool removeVnet(const std::string& key, DashVnetBulkContext& ctxt);
-    bool removeVnetPost(const std::string& key, const DashVnetBulkContext& ctxt);
-    bool addOutboundCaToPa(const std::string& key, VnetMapBulkContext& ctxt);
-    bool addOutboundCaToPaPost(const std::string& key, const VnetMapBulkContext& ctxt);
+    DashTaskResult addVnet(const std::string& key, DashVnetBulkContext& ctxt);
+    DashTaskResult addVnetPost(const std::string& key, const DashVnetBulkContext& ctxt);
+    DashTaskResult removeVnet(const std::string& key, DashVnetBulkContext& ctxt);
+    DashTaskResult removeVnetPost(const std::string& key, const DashVnetBulkContext& ctxt);
+    DashTaskResult addOutboundCaToPa(const std::string& key, VnetMapBulkContext& ctxt);
+    DashTaskResult addOutboundCaToPaPost(const std::string& key, const VnetMapBulkContext& ctxt);
     void removeOutboundCaToPa(const std::string& key, VnetMapBulkContext& ctxt);
-    bool removeOutboundCaToPaPost(const std::string& key, const VnetMapBulkContext& ctxt);
+    DashTaskResult removeOutboundCaToPaPost(const std::string& key, const VnetMapBulkContext& ctxt);
     void addPaValidation(const std::string& key, VnetMapBulkContext& ctxt);
-    bool addPaValidationPost(const std::string& key, const VnetMapBulkContext& ctxt);
+    DashTaskResult addPaValidationPost(const std::string& key, const VnetMapBulkContext& ctxt);
     void removePaValidation(const std::string& key, DashVnetBulkContext& ctxt);
-    bool removePaValidationPost(const std::string& key, const DashVnetBulkContext& ctxt);
-    bool addVnetMap(const std::string& key, VnetMapBulkContext& ctxt);
-    bool addVnetMapPost(const std::string& key, const VnetMapBulkContext& ctxt);
-    bool removeVnetMap(const std::string& key, VnetMapBulkContext& ctxt);
-    bool removeVnetMapPost(const std::string& key, const VnetMapBulkContext& ctxt);
+    DashTaskResult removePaValidationPost(const std::string& key, const DashVnetBulkContext& ctxt);
+    DashTaskResult addVnetMap(const std::string& key, VnetMapBulkContext& ctxt);
+    DashTaskResult addVnetMapPost(const std::string& key, const VnetMapBulkContext& ctxt);
+    DashTaskResult removeVnetMap(const std::string& key, VnetMapBulkContext& ctxt);
+    DashTaskResult removeVnetMapPost(const std::string& key, const VnetMapBulkContext& ctxt);
 };

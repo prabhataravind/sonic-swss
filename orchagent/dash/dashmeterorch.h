@@ -17,6 +17,7 @@
 #include "zmqserver.h"
 
 #include "dashorch.h"
+#include "dashtaskresult.h"
 #include "dash_api/meter_policy.pb.h"
 #include "dash_api/meter_rule.pb.h"
 
@@ -78,17 +79,17 @@ private:
     void doTaskMeterPolicyTable(ConsumerBase &consumer);
     void doTaskMeterRuleTable(ConsumerBase &consumer);
 
-    bool addMeterPolicy(const std::string& meter_policy, MeterPolicyContext& ctxt);
-    bool removeMeterPolicy(const std::string& meter_policy);
+    DashTaskResult addMeterPolicy(const std::string& meter_policy, MeterPolicyContext& ctxt);
+    DashTaskResult removeMeterPolicy(const std::string& meter_policy);
 
     uint32_t getMeterPolicyRuleCount(const std::string& meter_policy) const;
     sai_ip_addr_family_t getMeterPolicyAddrFamily(const std::string& meter_policy) const;
     bool isV4(const std::string& meter_policy) const;
 
-    bool addMeterRule(const std::string& key, MeterRuleBulkContext& ctxt);
-    bool addMeterRulePost(const std::string& key, const MeterRuleBulkContext& ctxt);
-    bool removeMeterRule(const std::string& key, MeterRuleBulkContext& ctxt);
-    bool removeMeterRulePost(const std::string& key, const MeterRuleBulkContext& ctxt);
+    DashTaskResult addMeterRule(const std::string& key, MeterRuleBulkContext& ctxt);
+    DashTaskResult addMeterRulePost(const std::string& key, const MeterRuleBulkContext& ctxt);
+    DashTaskResult removeMeterRule(const std::string& key, MeterRuleBulkContext& ctxt);
+    DashTaskResult removeMeterRulePost(const std::string& key, const MeterRuleBulkContext& ctxt);
 
     bool isMeterPolicyBound(const std::string& meter_policy) const;
     void incrMeterPolicyRuleCount(const std::string& meter_policy);

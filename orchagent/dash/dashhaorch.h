@@ -18,6 +18,7 @@
 #include "dash_api/ha_scope.pb.h"
 
 #include "pbutils.h"
+#include "dashtaskresult.h"
 
 struct HaSetEntry
 {
@@ -64,19 +65,19 @@ protected:
     void doTaskHaScopeTable(ConsumerBase &consumer);
     void doTaskBfdSessionTable(ConsumerBase &consumer);
 
-    bool addHaSetEntry(const std::string &key, const dash::ha_set::HaSet &entry);
-    bool removeHaSetEntry(const std::string &key);
-    bool addHaScopeEntry(const std::string &key, const dash::ha_scope::HaScope &entry);
-    bool removeHaScopeEntry(const std::string &key);
-    bool setHaScopeHaRole(const std::string &key, const dash::ha_scope::HaScope &entry);
-    bool setHaScopeFlowReconcileRequest(const  std::string &key);
-    bool setHaScopeActivateRoleRequest(const std::string &key);
-    bool setHaScopeDisabled(const std::string &key, bool disabled);
+    DashTaskResult addHaSetEntry(const std::string &key, const dash::ha_set::HaSet &entry);
+    DashTaskResult removeHaSetEntry(const std::string &key);
+    DashTaskResult addHaScopeEntry(const std::string &key, const dash::ha_scope::HaScope &entry);
+    DashTaskResult removeHaScopeEntry(const std::string &key);
+    DashTaskResult setHaScopeHaRole(const std::string &key, const dash::ha_scope::HaScope &entry);
+    DashTaskResult setHaScopeFlowReconcileRequest(const  std::string &key);
+    DashTaskResult setHaScopeActivateRoleRequest(const std::string &key);
+    DashTaskResult setHaScopeDisabled(const std::string &key, bool disabled);
+    DashTaskResult setEniHaScopeId(const sai_object_id_t eni_id, const sai_object_id_t ha_scope_id);
     virtual bool isHaScopeAdminStateAttrSupported();
-    bool setEniHaScopeId(const sai_object_id_t eni_id, const sai_object_id_t ha_scope_id);
     bool register_ha_set_notifier();
     bool register_ha_scope_notifier();
-    bool updateExistingHaSetEntry(const std::string &key, const dash::ha_set::HaSet &entry, sai_object_id_t sai_ha_set_oid);
+    DashTaskResult updateExistingHaSetEntry(const std::string &key, const dash::ha_set::HaSet &entry, sai_object_id_t sai_ha_set_oid);
 
     bool has_dpu_scope();
     bool has_eni_scope();

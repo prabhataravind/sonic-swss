@@ -53,7 +53,6 @@ void DashPortMapOrch::doTaskPortMapTable(ConsumerBase &consumer)
     SWSS_LOG_ENTER();
 
     auto it = consumer.m_toSync.begin();
-    uint32_t result;
 
     std::map<std::pair<std::string, std::string>,
              DashPortMapBulkContext>
@@ -68,7 +67,6 @@ void DashPortMapOrch::doTaskPortMapTable(ConsumerBase &consumer)
                                  std::forward_as_tuple());
         bool inserted = rc.second;
         auto &ctxt = rc.first->second;
-        result = DASH_RESULT_SUCCESS;
         SWSS_LOG_INFO("Processing port map entry: %s, operation: %s", port_map_id.c_str(), op.c_str());
 
         if (!inserted)
@@ -81,12 +79,13 @@ void DashPortMapOrch::doTaskPortMapTable(ConsumerBase &consumer)
             // the only info we need is the port map ID which is provided in the key
             // no need to parse protobuf message here
 
-            if (addPortMap(port_map_id, ctxt))
+            auto task_result = addPortMap(port_map_id, ctxt);
+            if (!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
                 // the only reason to remove from consumer prior to flush is if the port map already exists,
                 // so treat it like a success
-                writeResultToDB(dash_port_map_result_table_, port_map_id, result);
+                writeResultToDB(dash_port_map_result_table_, port_map_id, task_result.success ? DASH_RESULT_SUCCESS : DASH_RESULT_FAILURE);
             }
             else
             {
@@ -95,7 +94,8 @@ void DashPortMapOrch::doTaskPortMapTable(ConsumerBase &consumer)
         }
         else if (op == DEL_COMMAND)
         {
-            if (removePortMap(port_map_id, ctxt))
+            auto task_result = removePortMap(port_map_id, ctxt);
+            if (!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
                 removeResultFromDB(dash_port_map_result_table_, port_map_id);
@@ -120,7 +120,6 @@ void DashPortMapOrch::doTaskPortMapTable(ConsumerBase &consumer)
         swss::KeyOpFieldsValuesTuple tuple = it_prev->second;
         std::string port_map_id = kfvKey(tuple);
         std::string op = kfvOp(tuple);
-        result = DASH_RESULT_SUCCESS;
         auto found = toBulk.find(std::make_pair(port_map_id, op));
         if (found == toBulk.end())
         {
@@ -137,20 +136,21 @@ void DashPortMapOrch::doTaskPortMapTable(ConsumerBase &consumer)
 
         if (op == SET_COMMAND)
         {
-            if (addPortMapPost(port_map_id, ctxt))
+            auto task_result = addPortMapPost(port_map_id, ctxt);
+            if (!task_result.retry)
             {
                 it_prev = consumer.m_toSync.erase(it_prev);
             }
             else
             {
-                result = DASH_RESULT_FAILURE;
                 it_prev++;
             }
-            writeResultToDB(dash_port_map_result_table_, port_map_id, result);
+            writeResultToDB(dash_port_map_result_table_, port_map_id, task_result.success ? DASH_RESULT_SUCCESS : DASH_RESULT_FAILURE);
         }
         else if (op == DEL_COMMAND)
         {
-            if (removePortMapPost(port_map_id, ctxt))
+            auto task_result = removePortMapPost(port_map_id, ctxt);
+            if (!task_result.retry)
             {
                 it_prev = consumer.m_toSync.erase(it_prev);
                 removeResultFromDB(dash_port_map_result_table_, port_map_id);
@@ -180,14 +180,14 @@ sai_object_id_t DashPortMapOrch::getPortMapOid(const std::string& port_map_name)
     return it->second;
 }
 
-bool DashPortMapOrch::addPortMap(const std::string &port_map_id, DashPortMapBulkContext &ctxt)
+DashTaskResult DashPortMapOrch::addPortMap(const std::string &port_map_id, DashPortMapBulkContext &ctxt)
 {
     SWSS_LOG_ENTER();
 
     if (port_map_table_.find(port_map_id) != port_map_table_.end())
     {
         SWSS_LOG_WARN("Port map %s already exists", port_map_id.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
 
     std::vector<sai_attribute_t> attrs;
@@ -199,17 +199,17 @@ bool DashPortMapOrch::addPortMap(const std::string &port_map_id, DashPortMapBulk
     object_ids.emplace_back();
     port_map_bulker_.create_entry(&object_ids.back(), (uint32_t)attrs.size(), attrs.data());
     SWSS_LOG_INFO("Adding port map %s to bulker", port_map_id.c_str());
-    return false;
+    return DashTaskResult::retryLater();
 }
 
-bool DashPortMapOrch::addPortMapPost(const std::string &port_map_id, DashPortMapBulkContext &ctxt)
+DashTaskResult DashPortMapOrch::addPortMapPost(const std::string &port_map_id, DashPortMapBulkContext &ctxt)
 {
     SWSS_LOG_ENTER();
 
     auto &object_ids = ctxt.port_map_oids;
     if (object_ids.empty())
     {
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     auto it_status = object_ids.begin();
@@ -217,15 +217,15 @@ bool DashPortMapOrch::addPortMapPost(const std::string &port_map_id, DashPortMap
     if (port_map_oid == SAI_NULL_OBJECT_ID)
     {
         SWSS_LOG_ERROR("Failed to create port map %s", port_map_id.c_str());
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     port_map_table_[port_map_id] = port_map_oid;
     SWSS_LOG_NOTICE("Created port map %s with OID 0x%" PRIx64, port_map_id.c_str(), port_map_oid);
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashPortMapOrch::removePortMap(const std::string &port_map_id, DashPortMapBulkContext &ctxt)
+DashTaskResult DashPortMapOrch::removePortMap(const std::string &port_map_id, DashPortMapBulkContext &ctxt)
 {
     SWSS_LOG_ENTER();
 
@@ -233,7 +233,7 @@ bool DashPortMapOrch::removePortMap(const std::string &port_map_id, DashPortMapB
     if (it == port_map_table_.end())
     {
         SWSS_LOG_WARN("Port map %s not found for removal", port_map_id.c_str());
-        return true;
+        return DashTaskResult::ok();
     }
 
     auto &object_statuses = ctxt.port_map_statuses;
@@ -242,17 +242,17 @@ bool DashPortMapOrch::removePortMap(const std::string &port_map_id, DashPortMapB
     port_map_bulker_.remove_entry(&object_statuses.back(), port_map_oid);
     SWSS_LOG_NOTICE("Removing port map %s with OID 0x%" PRIx64, port_map_id.c_str(), port_map_oid);
 
-    return false;
+    return DashTaskResult::retryLater();
 }
 
-bool DashPortMapOrch::removePortMapPost(const std::string &port_map_id, DashPortMapBulkContext &ctxt)
+DashTaskResult DashPortMapOrch::removePortMapPost(const std::string &port_map_id, DashPortMapBulkContext &ctxt)
 {
     SWSS_LOG_ENTER();
 
     auto &object_statuses = ctxt.port_map_statuses;
     if (object_statuses.empty())
     {
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     auto it_status = object_statuses.begin();
@@ -262,19 +262,19 @@ bool DashPortMapOrch::removePortMapPost(const std::string &port_map_id, DashPort
         if (status == SAI_STATUS_NOT_EXECUTED)
         {
             SWSS_LOG_INFO("Port map %s not removed, will retry later", port_map_id.c_str());
-            return false;
+            return DashTaskResult::retryLater();
         }
         SWSS_LOG_ERROR("Failed to remove port map %s, status: %s", port_map_id.c_str(), sai_serialize_status(status).c_str());
         task_process_status handle_status = handleSaiCreateStatus((sai_api_t)SAI_API_DASH_OUTBOUND_PORT_MAP, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
     port_map_table_.erase(port_map_id);
     SWSS_LOG_NOTICE("Removed port map %s", port_map_id.c_str());
-    return true;
+    return DashTaskResult::ok();
 }
 
 void DashPortMapOrch::doTaskPortMapRangeTable(ConsumerBase &consumer)
@@ -282,7 +282,6 @@ void DashPortMapOrch::doTaskPortMapRangeTable(ConsumerBase &consumer)
     SWSS_LOG_ENTER();
 
     auto it = consumer.m_toSync.begin();
-    uint32_t result;
 
     std::map<std::pair<std::string, std::string>,
              DashPortMapRangeBulkContext>
@@ -297,7 +296,6 @@ void DashPortMapOrch::doTaskPortMapRangeTable(ConsumerBase &consumer)
                                  std::forward_as_tuple());
         bool inserted = rc.second;
         auto &ctxt = rc.first->second;
-        result = DASH_RESULT_FAILURE;
         SWSS_LOG_INFO("Processing port map range entry: %s, operation: %s", key.c_str(), op.c_str());
 
         if (!inserted)
@@ -321,12 +319,13 @@ void DashPortMapOrch::doTaskPortMapRangeTable(ConsumerBase &consumer)
                 continue;
             }
 
-            if (addPortMapRange(ctxt))
+            auto task_result = addPortMapRange(ctxt);
+            if (!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
                 // if we ever remove from consumer early, that means parsing was unsuccessful and a retry will not help,
                 // so treat it as a failure
-                writeResultToDB(dash_port_map_range_result_table_, key, result);
+                writeResultToDB(dash_port_map_range_result_table_, key, task_result.success ? DASH_RESULT_SUCCESS : DASH_RESULT_FAILURE);
             }
             else
             {
@@ -335,7 +334,8 @@ void DashPortMapOrch::doTaskPortMapRangeTable(ConsumerBase &consumer)
         }
         else if (op == DEL_COMMAND)
         {
-            if (removePortMapRange(ctxt))
+            auto task_result = removePortMapRange(ctxt);
+            if (!task_result.retry)
             {
                 it = consumer.m_toSync.erase(it);
                 removeResultFromDB(dash_port_map_range_result_table_, key);
@@ -359,7 +359,6 @@ void DashPortMapOrch::doTaskPortMapRangeTable(ConsumerBase &consumer)
         swss::KeyOpFieldsValuesTuple tuple = it_prev->second;
         std::string key = kfvKey(tuple);
         std::string op = kfvOp(tuple);
-        result = DASH_RESULT_SUCCESS;
         auto found = toBulk.find(std::make_pair(key, op));
         if (found == toBulk.end())
         {
@@ -375,20 +374,21 @@ void DashPortMapOrch::doTaskPortMapRangeTable(ConsumerBase &consumer)
 
         if (op == SET_COMMAND)
         {
-            if (addPortMapRangePost(ctxt))
+            auto task_result = addPortMapRangePost(ctxt);
+            if (!task_result.retry)
             {
                 it_prev = consumer.m_toSync.erase(it_prev);
             }
             else
             {
-                result = DASH_RESULT_FAILURE;
                 it_prev++;
             }
-            writeResultToDB(dash_port_map_range_result_table_, key, result);
+            writeResultToDB(dash_port_map_range_result_table_, key, task_result.success ? DASH_RESULT_SUCCESS : DASH_RESULT_FAILURE);
         }
         else if (op == DEL_COMMAND)
         {
-            if (removePortMapRangePost(ctxt))
+            auto task_result = removePortMapRangePost(ctxt);
+            if (!task_result.retry)
             {
                 it_prev = consumer.m_toSync.erase(it_prev);
                 removeResultFromDB(dash_port_map_range_result_table_, key);
@@ -406,7 +406,7 @@ void DashPortMapOrch::doTaskPortMapRangeTable(ConsumerBase &consumer)
     }
 }
 
-bool DashPortMapOrch::addPortMapRange(DashPortMapRangeBulkContext &ctxt)
+DashTaskResult DashPortMapOrch::addPortMapRange(DashPortMapRangeBulkContext &ctxt)
 {
     SWSS_LOG_ENTER();
 
@@ -414,7 +414,7 @@ bool DashPortMapOrch::addPortMapRange(DashPortMapRangeBulkContext &ctxt)
     if (parent_it == port_map_table_.end())
     {
         SWSS_LOG_INFO("Parent port map %s does not exist for port map range", ctxt.parent_map_id.c_str());
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     sai_outbound_port_map_port_range_entry_t entry;
@@ -432,7 +432,7 @@ bool DashPortMapOrch::addPortMapRange(DashPortMapRangeBulkContext &ctxt)
     if (action_it == gPortMapRangeActionMap.end())
     {
         SWSS_LOG_ERROR("Unknown port map range action: %s", dash::outbound_port_map_range::PortMapRangeAction_Name(ctxt.metadata.action()).c_str());
-        return true;
+        return DashTaskResult::failed();
     }
 
     attr.id = SAI_OUTBOUND_PORT_MAP_PORT_RANGE_ENTRY_ATTR_ACTION;
@@ -443,7 +443,7 @@ bool DashPortMapOrch::addPortMapRange(DashPortMapRangeBulkContext &ctxt)
     if (!to_sai(ctxt.metadata.backend_ip(), attr.value.ipaddr))
     {
         SWSS_LOG_ERROR("Failed to convert backend IP %s to SAI format", ctxt.metadata.backend_ip().DebugString().c_str());
-        return true;
+        return DashTaskResult::failed();
     }
     attrs.push_back(attr);
 
@@ -459,17 +459,17 @@ bool DashPortMapOrch::addPortMapRange(DashPortMapRangeBulkContext &ctxt)
     object_statuses.emplace_back();
     port_map_range_bulker_.create_entry(&object_statuses.back(), &entry, (uint32_t)attrs.size(), attrs.data());
     SWSS_LOG_INFO("Adding port map range for %s: start=%d, end=%d", ctxt.parent_map_id.c_str(), ctxt.start_port, ctxt.end_port);
-    return false;
+    return DashTaskResult::retryLater();
 }
 
-bool DashPortMapOrch::addPortMapRangePost(DashPortMapRangeBulkContext &ctxt)
+DashTaskResult DashPortMapOrch::addPortMapRangePost(DashPortMapRangeBulkContext &ctxt)
 {
     SWSS_LOG_ENTER();
 
     auto &object_statuses = ctxt.port_map_range_statuses;
     if (object_statuses.empty())
     {
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     auto it_status = object_statuses.begin();
@@ -479,21 +479,21 @@ bool DashPortMapOrch::addPortMapRangePost(DashPortMapRangeBulkContext &ctxt)
         if (status == SAI_STATUS_ITEM_ALREADY_EXISTS)
         {
             SWSS_LOG_INFO("Port map range for %s already exists", ctxt.parent_map_id.c_str());
-            return true;
+            return DashTaskResult::ok();
         }
         SWSS_LOG_ERROR("Failed to create port map range for %s, status: %s", ctxt.parent_map_id.c_str(), sai_serialize_status(status).c_str());
         task_process_status handle_status = handleSaiCreateStatus((sai_api_t)SAI_API_DASH_OUTBOUND_PORT_MAP, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
     SWSS_LOG_INFO("Created port map range for %s: start=%d, end=%d", ctxt.parent_map_id.c_str(), ctxt.start_port, ctxt.end_port);
-    return true;
+    return DashTaskResult::ok();
 }
 
-bool DashPortMapOrch::removePortMapRange(DashPortMapRangeBulkContext &ctxt)
+DashTaskResult DashPortMapOrch::removePortMapRange(DashPortMapRangeBulkContext &ctxt)
 {
     SWSS_LOG_ENTER();
 
@@ -503,7 +503,7 @@ bool DashPortMapOrch::removePortMapRange(DashPortMapRangeBulkContext &ctxt)
         // this should never happen - it's not possible to create a port map range w/o first creating the parent port map,
         // and it's not possible to delete a port map while it still has child port map ranges
         SWSS_LOG_ERROR("Parent port map %s not found for port map range removal", ctxt.parent_map_id.c_str());
-        return true;
+        return DashTaskResult::failed();
     }
 
     sai_outbound_port_map_port_range_entry_t entry;
@@ -518,17 +518,17 @@ bool DashPortMapOrch::removePortMapRange(DashPortMapRangeBulkContext &ctxt)
     object_statuses.emplace_back();
     port_map_range_bulker_.remove_entry(&object_statuses.back(), &entry);
     SWSS_LOG_NOTICE("Removing port map range for %s: start=%d, end=%d", ctxt.parent_map_id.c_str(), ctxt.start_port, ctxt.end_port);
-    return false;
+    return DashTaskResult::retryLater();
 }
 
-bool DashPortMapOrch::removePortMapRangePost(DashPortMapRangeBulkContext &ctxt)
+DashTaskResult DashPortMapOrch::removePortMapRangePost(DashPortMapRangeBulkContext &ctxt)
 {
     SWSS_LOG_ENTER();
 
     auto &object_statuses = ctxt.port_map_range_statuses;
     if (object_statuses.empty())
     {
-        return false;
+        return DashTaskResult::retryLater();
     }
 
     auto it_status = object_statuses.begin();
@@ -538,18 +538,18 @@ bool DashPortMapOrch::removePortMapRangePost(DashPortMapRangeBulkContext &ctxt)
         if (status == SAI_STATUS_ITEM_NOT_FOUND)
         {
             SWSS_LOG_INFO("Port map range for %s already removed", ctxt.parent_map_id.c_str());
-            return true;
+            return DashTaskResult::ok();
         }
         SWSS_LOG_ERROR("Failed to remove port map range for %s, status: %s", ctxt.parent_map_id.c_str(), sai_serialize_status(status).c_str());
         task_process_status handle_status = handleSaiCreateStatus((sai_api_t)SAI_API_DASH_OUTBOUND_PORT_MAP, status);
         if (handle_status != task_success)
         {
-            return parseHandleSaiStatusFailure(handle_status);
+            return DashTaskResult::fromSaiStatus(handle_status);
         }
     }
 
     SWSS_LOG_NOTICE("Removed port map range for %s: start=%d, end=%d", ctxt.parent_map_id.c_str(), ctxt.start_port, ctxt.end_port);
-    return true;
+    return DashTaskResult::ok();
 }
 
 bool DashPortMapOrch::parsePortMapRange(const std::string &key, DashPortMapRangeBulkContext &ctxt)
