@@ -7,6 +7,7 @@
 #include <set>
 #include <memory>
 #include <utility>
+#include <chrono>
 #include <condition_variable>
 
 extern "C" {
@@ -191,6 +192,16 @@ public:
 
     size_t refillToSync();
     size_t refillToSync(swss::Table* table);
+
+    /* Exponential backoff state for retry-phase drains.
+     * Fresh events (Consumer::execute) bypass backoff entirely. */
+    std::chrono::steady_clock::time_point m_retryBackoffUntil{};
+    uint32_t m_retryBackoffExp = 0;
+    static constexpr uint32_t RETRY_BACKOFF_MAX_EXP = 5; // cap at 2^5 = 32 seconds
+
+    void resetRetryBackoff();
+    void bumpRetryBackoff();
+    bool isRetryBackoffActive() const;
 };
 
 class RingBuffer

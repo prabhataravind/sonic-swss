@@ -559,6 +559,25 @@ void Consumer::drain()
         ((Orch *)m_orch)->doTask((Consumer&)*this);
 }
 
+void ConsumerBase::resetRetryBackoff()
+{
+    m_retryBackoffExp = 0;
+    m_retryBackoffUntil = {};
+}
+
+void ConsumerBase::bumpRetryBackoff()
+{
+    auto delay = std::chrono::seconds(1u << m_retryBackoffExp);
+    m_retryBackoffUntil = std::chrono::steady_clock::now() + delay;
+    if (m_retryBackoffExp < RETRY_BACKOFF_MAX_EXP)
+        m_retryBackoffExp++;
+}
+
+bool ConsumerBase::isRetryBackoffActive() const
+{
+    return std::chrono::steady_clock::now() < m_retryBackoffUntil;
+}
+
 size_t Orch::addExistingData(const string& tableName)
 {
     auto consumer = dynamic_cast<ConsumerBase *>(getExecutor(tableName));
@@ -844,7 +863,22 @@ void Orch::doTask()
     for (auto &it : m_consumerMap)
     {
         count += retryToSync(it.first, threshold - count);
+
+        auto *consumer = dynamic_cast<ConsumerBase *>(it.second.get());
+        if (consumer && consumer->isRetryBackoffActive())
+            continue;
+
+        size_t before = consumer ? consumer->m_toSync.size() : 0;
         it.second->drain();
+
+        // After drain, update backoff based on whether tasks remain
+        if (consumer)
+        {
+            if (consumer->m_toSync.empty() || consumer->m_toSync.size() < before)
+                consumer->resetRetryBackoff();
+            else
+                consumer->bumpRetryBackoff();
+        }
     }
 }
 
